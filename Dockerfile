@@ -1,11 +1,7 @@
-# 使用輕量級的 Nginx 映像檔作為基礎
 FROM nginx:alpine
-
-# 將目前的 HTML 檔案複製到 Nginx 的預設靜態網頁目錄
-COPY 104_ai_predict_dashboard.html /usr/share/nginx/html/index.html
-
-# 暴露 80 連接埠
+# 將當前目錄下所有檔案複製到網頁伺服器目錄
+COPY . /usr/share/nginx/html/
+# 如果您的主檔名不是 index.html，請記得在這裡重新命名
+# RUN mv /usr/share/nginx/html/104_ai_predict_dashboard.html /usr/share/nginx/html/index.html
 EXPOSE 80
-
-# 啟動 Nginx
 CMD ["nginx", "-g", "daemon off;"]
