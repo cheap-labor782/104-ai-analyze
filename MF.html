@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>104 資料運行流程：程式執行流程圖</title>
+    <style>
+        /* 100% 全螢幕滿版設定 */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
+            background-color: #f8fafc; /* 超柔和極淡灰藍底 */
+            user-select: none;
+        }
+
+        /* 頂部固定標題區 (柔和半透明) - 調整為 flex 佈局以在右側完美置入按鈕，不影響標題排版 */
+        .header-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 14px 24px;
+            box-sizing: border-box;
+            border-bottom: 1px solid #e2e8f0;
+            z-index: 10;
+            box-shadow: 0 1px 15px rgba(148, 163, 184, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0 0 4px 0; font-size: 20px; color: #334155; font-weight: bold; }
+        .subtitle { margin: 0; font-size: 13px; color: #64748b; }
+
+        /* 🌟 橘色高質感回首頁按鈕樣式 (完美契合儀表板外觀，不佔用或破壞既有畫布空間) */
+        .nav-right-zone { display: flex; align-items: center; }
+        .home-btn {
+            padding: 10px 20px;
+            background-color: #FF7826;
+            border: 1px solid #FF7826;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(255, 120, 38, 0.2);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .home-btn:hover {
+            background-color: #E66313;
+            border-color: #E66313;
+            box-shadow: 0 4px 8px rgba(230, 99, 19, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* 滿版拖曳畫布 */
+        #viewport-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            box-sizing: border-box;
+            cursor: grab;
+        }
+        #viewport-container:active { cursor: grabbing; }
+
+        /* 動態移動與縮放的真實主體 */
+        #pan-zoom-content {
+            position: absolute;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        /* SVG 畫布與莫蘭迪色系箭頭連線設定 */
+        svg {
+            width: 1920px;
+            height: 1000px;
+        }
+        .connection {
+            fill: none;
+            stroke: #94a3b8; /* 柔和煙燻灰藍連線 */
+            stroke-width: 2px;
+        }
+        .arrow {
+            fill: #94a3b8;
+        }
+
+        /* 四大階段背景外框 (莫蘭迪淡雅灰色調) */
+        .subgraph-box {
+            fill: #ffffff;
+            stroke: #cbd5e1;
+            stroke-width: 1px;
+            rx: 12px;
+        }
+        .subgraph-title {
+            font-weight: bold;
+            font-size: 14px;
+            fill: #64748b;
+        }
+
+        /* ==================== 莫蘭迪柔和色系節點樣式 ==================== */
+        .node-io { fill: #fff7ed; stroke: #ffedd5; stroke-width: 2px; rx: 8px; }       /* 柔和杏橘 */
+        .node-clean { fill: #f0fdf4; stroke: #dcfce7; stroke-width: 2px; rx: 8px; }    /* 柔和薄荷綠 */
+        .node-feature { fill: #f0f9ff; stroke: #e0f2fe; stroke-width: 2px; rx: 8px; }  /* 柔和粉藍 */
+        .node-model { fill: #faf5ff; stroke: #f3e8ff; stroke-width: 2px; rx: 8px; }    /* 柔和薰衣草紫 */
+        .node-vis { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1.5px; rx: 20px; }   /* 柔和極淡灰 */
+
+        /* 節點內文字顏色調整 (低對比深灰，比純黑溫柔) */
+        text { font-family: "Microsoft JhengHei", sans-serif; font-size: 12px; fill: #334155; }
+        .node-title { font-weight: bold; font-size: 13px; }
+        .io-t { fill: #c2410c; }
+        .clean-t { fill: #15803d; }
+        .feat-t { fill: #0369a1; }
+        .model-t { fill: #6b21a8; }
+        .desc-text { fill: #64748b; font-size: 11px; }
+
+        /* 右下角固定操作提示與圖例 (柔和版) */
+        .footer-panel {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 14px 20px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            z-index: 10;
+            box-shadow: 0 4px 20px rgba(148, 163, 184, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; color: #475569; }
+        .l-box { width: 14px; height: 14px; border-radius: 4px; }
+        .l-io { background-color: #fff7ed; border: 1.5px solid #ffedd5; }
+        .l-clean { background-color: #f0fdf4; border: 1.5px solid #dcfce7; }
+        .l-feat { background-color: #f0f9ff; border: 1.5px solid #e0f2fe; }
+        .l-model { background-color: #faf5ff; border: 1.5px solid #f3e8ff; }
+        .l-vis { background-color: #f8fafc; border: 1.5px solid #e2e8f0; }
+        .tip { border-top: 1px solid #f1f5f9; padding-top: 6px; font-size: 11px; color: #94a3b8; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="header-panel">
+        <div>
+            <h1>職缺 CatBoost 104 資料運行流程：AI模型訓練完整執行步驟</h1>
+            <div class="subtitle">💡 操作提示：可在畫布任意處【按住拖曳畫面】或使用【滑鼠滾輪放大縮小】查看細節</div>
+        </div>
+        <div class="nav-right-zone">
+            <a href="Index.html" class="home-btn">📊 返回預報儀表板</a>
+        </div>
+    </div>
+
+    <div id="viewport-container">
+        <div id="pan-zoom-content">
+            <svg viewBox="0 0 1920 1000">
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#94a3b8" />
+                    </marker>
+                </defs>
+
+                <rect class="subgraph-box" x="20" y="40" width="410" height="910" />
+                <text class="subgraph-title" x="35" y="65">📋 階段一：原始資料載入與初步填補</text>
+
+                <rect class="subgraph-box" x="460" y="40" width="410" height="910" />
+                <text class="subgraph-title" x="475" y="65">🧠 階段二：非結構化文字特徵工程</text>
+
+                <rect class="subgraph-box" x="900" y="40" width="450" height="910" />
+                <text class="subgraph-title" x="915" y="65">🤖 階段三：薪資清洗與核心模型訓練</text>
+
+                <rect class="subgraph-box" x="1380" y="40" width="510" height="910" />
+                <text class="subgraph-title" x="1395" y="65">🎨 階段四：代理樹萃取與多視窗輸出</text>
+
+                <g>
+                    <path class="connection" d="M 225 145 L 225 210" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 225 275 L 225 340" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 225 405 L 225 470" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 225 535 L 225 600" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 225 665 L 225 710 L 665 710 L 665 110" marker-end="url(#arrow)" />
+
+                    <path class="connection" d="M 665 175 L 665 240" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 665 305 L 665 370" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 665 435 L 665 500" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 665 565 L 665 620 L 1125 620 L 1125 110" marker-end="url(#arrow)" />
+
+                    <path class="connection" d="M 1125 175 L 1125 240" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1125 305 L 1125 370" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1125 435 L 1125 500" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1125 565 L 1125 670" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1125 735 L 1125 800 L 1635 800 L 1635 115" marker-end="url(#arrow)" />
+
+                    <path class="connection" d="M 1635 180 L 1635 240" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1635 305 L 1635 370" marker-end="url(#arrow)" />
+                    
+                    <path class="connection" d="M 1635 435 L 1635 480 Q 1635 500 1615 500 L 1450 500 Q 1430 500 1430 520 L 1430 560" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1635 435 L 1635 560" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1635 435 L 1635 480 Q 1635 500 1655 500 L 1820 500 Q 1840 500 1840 520 L 1840 560" marker-end="url(#arrow)" />
+                    <path class="connection" d="M 1635 435 L 1635 460 L 1480 460 L 1480 720 L 1635 720 L 1635 750" marker-end="url(#arrow)" />
+                </g>
+
+                <g>
+                    <rect class="node-io" x="50" y="80" width="350" height="65" />
+                    <text class="node-title io-t" x="225" y="108" text-anchor="middle">📥 1. 讀取原始資料</text>
+                    <text class="desc-text" x="225" y="128" text-anchor="middle">pd.read_csv("104_0528_tech_jobs.csv")，支援雙編碼</text>
+
+                    <rect class="node-clean" x="50" y="210" width="350" height="65" />
+                    <text class="node-title clean-t" x="225" y="238" text-anchor="middle">🛠️ 2. 全域空值填補 (.fillna)</text>
+                    <text class="desc-text" x="225" y="258" text-anchor="middle">處理 jobTitles, jobCategory, 員工人數等空欄位</text>
+
+                    <rect class="node-io" x="50" y="340" width="350" height="65" />
+                    <text class="node-title io-t" x="225" y="368" text-anchor="middle">📊 3. 擷取潛在亂碼字元樣本</text>
+                    <text class="desc-text" x="225" y="388" text-anchor="middle">抓取前 1000 筆 jobTitles 供後續對比圖繪製</text>
+
+                    <rect class="node-clean" x="50" y="470" width="350" height="65" />
+                    <text class="node-title clean-t" x="225" y="498" text-anchor="middle">🧼 4. 欄位格式標準化</text>
+                    <text class="desc-text" x="225" y="518" text-anchor="middle">將類別欄位移除標點符號，串接成文字特徵</text>
+
+                    <rect class="node-clean" x="50" y="600" width="350" height="65" />
+                    <text class="node-title clean-t" x="225" y="628" text-anchor="middle">📝 5. 輸出初始載入記錄</text>
+                    <text class="desc-text" x="225" y="648" text-anchor="middle">計算並 print 成功載入的檔案維度(Shape)</text>
+
+                    <rect class="node-feature" x="490" y="110" width="350" height="65" />
+                    <text class="node-title feat-t" x="665" y="138" text-anchor="middle">🽵 6. Jieba 繁體中文智慧斷詞</text>
+                    <text class="desc-text" x="665" y="158" text-anchor="middle">自訂 tokenizer 排除單字與特殊符號，儲存詞頻</text>
+
+                    <rect class="node-feature" x="490" y="240" width="350" height="65" />
+                    <text class="node-title feat-t" x="665" y="268" text-anchor="middle">🔢 7. TF-IDF 向量化轉矩陣</text>
+                    <text class="desc-text" x="665" y="288" text-anchor="middle">最高設定 4000 個特徵詞組，計算詞彙權重</text>
+
+                    <rect class="node-feature" x="490" y="370" width="350" height="65" />
+                    <text class="node-title feat-t" x="665" y="398" text-anchor="middle">🧠 8. K-Means 進行職務集群</text>
+                    <text class="desc-text" x="665" y="418" text-anchor="middle">劃分成 10 大核心群集標籤 (job_cluster_label)</text>
+
+                    <rect class="node-feature" x="490" y="500" width="350" height="65" />
+                    <text class="node-title feat-t" x="665" y="528" text-anchor="middle">🧬 9. 衍生交叉組合特徵</text>
+                    <text class="desc-text" x="665" y="548" text-anchor="middle">建立高級特徵 clean_location 與 rq_year_cluster</text>
+
+                    <rect class="node-clean" x="950" y="110" width="350" height="65" />
+                    <text class="node-title clean-t" x="1125" y="138" text-anchor="middle">💰 10. 解析原始薪資特徵</text>
+                    <text class="desc-text" x="1125" y="158" text-anchor="middle">排除面議/時薪/日薪，提取最高年薪估算值</text>
+
+                    <rect class="node-clean" x="950" y="240" width="350" height="65" />
+                    <text class="node-title clean-t" x="1125" y="268" text-anchor="middle">🛑 11. 極端與離群值防爆過濾</text>
+                    <text class="desc-text" x="1125" y="288" text-anchor="middle">>500萬以均值取代；&lt;=80萬與空值予以剔除</text>
+
+                    <rect class="node-feature" x="950" y="370" width="350" height="65" />
+                    <text class="node-title feat-t" x="1125" y="398" text-anchor="middle">📐 12. 目標值對數轉換 &amp; 資料劃分</text>
+                    <text class="desc-text" x="1125" y="418" text-anchor="middle">y值進行 log1p 轉換，按 80% / 20% 切分訓練測試集</text>
+
+                    <rect class="node-model" x="950" y="500" width="350" height="65" />
+                    <text class="node-title model-t" x="1125" y="528" text-anchor="middle">🤖 13. 訓練 CatBoostRegressor 核心引擎</text>
+                    <text class="desc-text" x="1125" y="548" text-anchor="middle">設定迭代200次，Loss=MAE，直跑高維類別特徵</text>
+
+                    <rect class="node-model" x="950" y="670" width="350" height="65" />
+                    <text class="node-title model-t" x="1125" y="698" text-anchor="middle">📈 14. 執行模型預測與還原</text>
+                    <text class="desc-text" x="1125" y="718" text-anchor="middle">對測試集預測，並用 expm1 還原成真實新台幣薪資</text>
+
+                    <rect class="node-feature" x="1460" y="115" width="350" height="65" />
+                    <text class="node-title feat-t" x="1635" y="143" text-anchor="middle">🔢 15. OrdinalEncoder 矩陣編碼</text>
+                    <text class="desc-text" x="1635" y="163" text-anchor="middle">將類別特徵轉為數值，供 Sklearn 決策樹計算</text>
+
+                    <rect class="node-model" x="1460" y="240" width="350" height="65" />
+                    <text class="node-title model-t" x="1635" y="268" text-anchor="middle">🌲 16. 訓練 Sklearn 代理決策樹</text>
+                    <text class="desc-text" x="1635" y="288" text-anchor="middle">設定 max_depth=3，強力擬合並萃取核心特徵分流規則</text>
+
+                    <rect class="node-io" x="1460" y="370" width="350" height="65" />
+                    <text class="node-title io-t" x="1635" y="398" text-anchor="middle">💾 17. 輸出自動化互動 HTML 網頁</text>
+                    <text class="desc-text" x="1635" y="418" text-anchor="middle">抽取決策路徑與葉子節點薪資，寫入本地網頁檔</text>
+
+                    <rect class="node-vis" x="1410" y="560" width="145" height="80" />
+                    <text class="node-title" x="1482" y="595" text-anchor="middle">🎨 視窗一</text>
+                    <text class="desc-text" x="1482" y="615" text-anchor="middle">Matplotlib 決策樹圖</text>
+
+                    <rect class="node-vis" x="1562" y="560" width="145" height="80" />
+                    <text class="node-title" x="1634" y="595" text-anchor="middle">🎨 視窗二</text>
+                    <text class="desc-text" x="1634" y="615" text-anchor="middle">亂碼與特徵詞頻對比</text>
+
+                    <rect class="node-vis" x="1715" y="560" width="145" height="80" />
+                    <text class="node-title" x="1787" y="595" text-anchor="middle">🎨 視窗三</text>
+                    <text class="desc-text" x="1787" y="615" text-anchor="middle">實際 vs 預測偏態圖</text>
+
+                    <rect class="node-vis" x="1490" y="750" width="290" height="65" />
+                    <text class="node-title" x="1635" y="778" text-anchor="middle">🔥 視窗四 (主視窗阻塞結束點)</text>
+                    <text class="desc-text" x="1635" y="798" text-anchor="middle">CatBoost 特徵重要性權重水平長條圖 (plt.show)</text>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+    <div class="footer-panel">
+        <div class="legend-item"><div class="l-box l-io"></div>資料輸入 / 輸出 (I/O)</div>
+        <div class="legend-item"><div class="l-box l-clean"></div>資料清洗 / 空值填補</div>
+        <div class="legend-item"><div class="l-box l-feat"></div>文字斷詞 / 特徵工程</div>
+        <div class="legend-item"><div class="l-box l-model"></div>AI 模型訓練 / 代理樹</div>
+        <div class="legend-item"><div class="l-box l-vis"></div>Matplotlib 圖表渲染</div>
+        <div class="tip">🖱️ 滾輪: 縮放 | 左鍵拖曳: 移動</div>
+    </div>
+
+    <script>
+        const container = document.getElementById('viewport-container');
+        const content = document.getElementById('pan-zoom-content');
+
+        // 自動滿版動態算計：根據使用者目前的瀏覽器寬度自動定錨初始縮放比
+        let baseWidth = 1920;
+        let scale = Math.max(window.innerWidth / (baseWidth + 100), 0.45); 
+        let x = (window.innerWidth - baseWidth * scale) / 2 + 30;
+        let y = 125; // 預留頂部標題空間
+        
+        let isDragging = false;
+        let startX, startY;
+
+        function updateTransform() {
+            content.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+        }
+        updateTransform();
+
+        // 拖曳處理
+        container.addEventListener('mousedown', (e) => {
+            if(e.target.closest('.home-btn')) return; // 防止點擊按鈕時誤觸畫布拖曳
+            isDragging = true;
+            startX = e.clientX - x;
+            startY = e.clientY - y;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            x = e.clientX - startX;
+            y = e.clientY - startY;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        // 滾輪縮放
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.08;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            const contentX = (mouseX - x) / scale;
+            const contentY = (mouseY - y) / scale;
+
+            if (e.deltaY < 0) {
+                scale = Math.min(scale * zoomFactor, 3.5);
+            } else {
+                scale = Math.max(scale / zoomFactor, 0.15);
+            }
+
+            x = mouseX - contentX * scale;
+            y = mouseY - contentY * scale;
+            updateTransform();
+        }, { passive: false });
+
+        // 視窗自適應
+        window.addEventListener('resize', () => {
+            scale = Math.max(window.innerWidth / (baseWidth + 100), 0.45);
+            x = (window.innerWidth - baseWidth * scale) / 2 + 30;
+            updateTransform();
+        });
+    </script>
+</body>
+</html>

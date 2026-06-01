@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>104 職缺分析與即時行情儀表板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: "Helvetica Neue", Helvetica, Arial, "Microsoft JhengHei", sans-serif; background-color: #F4F6F9; color: #333; }
+        .navbar { background-color: #2F3239; color: white; padding: 15px 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .navbar h1 { margin: 0; font-size: 22px; letter-spacing: 1px; }
+        .navbar .author { font-size: 14px; color: #BBB; }
+        .navbar .logo-orange { color: #FF7826; font-weight: bold; }
+        
+        .nav-right-zone { display: flex; align-items: center; gap: 15px; }
+        .home-btn { padding: 8px 16px; background-color: #FF7826; color: white; text-decoration: none; font-size: 13px; font-weight: bold; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: background 0.2s; display: inline-flex; align-items: center; gap: 5px; }
+        .home-btn:hover { background-color: #E66313; }
+        .home-btn.secondary { background-color: #4b5563; }
+        .home-btn.secondary:hover { background-color: #374151; }
+
+        .container { max-width: 1400px; margin: 30px auto; padding: 0 20px; }
+        .upload-card { background: white; border: 2px dashed #CBD5E1; border-radius: 8px; padding: 35px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .upload-card:hover { border-color: #FF7826; background-color: #FFFBF7; }
+        .upload-icon { font-size: 48px; color: #94A3B8; margin-bottom: 10px; }
+        .upload-card:hover .upload-icon { color: #FF7826; }
+        .status-message { margin-top: 15px; font-size: 14px; color: #16a34a; font-weight: bold; display: none; }
+        
+        .tabs-header { display: flex; gap: 10px; margin-top: 30px; border-bottom: 2px solid #E2E8F0; padding-bottom: 0; }
+        .tab-btn { padding: 12px 24px; background: none; border: none; font-size: 16px; font-weight: bold; color: #64748B; cursor: pointer; transition: all 0.2s; border-radius: 6px 6px 0 0; border: 1px solid transparent; margin-bottom: -2px; }
+        .tab-btn:hover { color: #2F3239; background-color: #E2E8F0; }
+        .tab-btn.active { color: #FF7826; border: 1px solid #E2E8F0; border-bottom: 2px solid white; background-color: white; }
+        
+        .tab-content { display: none; margin-top: 25px; }
+        .tab-content.active { display: block; }
+        
+        .grid-dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
+        .grid-left { display: flex; flex-direction: column; gap: 30px; }
+        .card { background: white; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 25px; }
+        .card-title { font-size: 18px; font-weight: bold; margin-top: 0; margin-bottom: 20px; border-left: 4px solid #FF7826; padding-left: 10px; color: #2F3239; }
+        
+        .form-control { width: 100%; padding: 10px; border: 1px solid #DDD; border-radius: 4px; box-sizing: border-box; font-size: 14px; background-color: #FFF; }
+        .form-control:focus { outline: none; border-color: #FF7826; }
+        
+        .chart-box { min-height: 430px; width: 100%; }
+        
+        .table-wrapper { max-height: 500px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 6px; }
+        .kw-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+        .kw-table th { background-color: #F8FAFC; padding: 12px; font-weight: bold; border-bottom: 2px solid #E2E8F0; position: sticky; top: 0; }
+        .kw-table td { padding: 12px; border-bottom: 1px solid #E2E8F0; }
+        .kw-table tr:hover { background-color: #F8FAFC; }
+    </style>
+</head>
+<body>
+
+    <div class="navbar">
+        <h1><span class="logo-orange">104</span> 職缺分析與即時行情儀表板</h1>
+        <div class="nav-right-zone">
+            <span class="author">前端工程師 × AI 訓練師 協作系統</span>
+            <a href="MF.html" class="home-btn secondary">📁 數據訓練 AI 模型流程圖</a>
+            <a href="decision_tree_flow.html" class="home-btn">🌲 模型真實數據代理樹</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="upload-card" id="drop_zone" onclick="document.getElementById('file_input').click()">
+            <div class="upload-icon">📥</div>
+            <div style="font-size: 18px; font-weight: bold; color: #334155;">拖曳 104 職缺 CSV 檔案至此處，或<span style="color: #FF7826;">點擊瀏覽檔案</span></div>
+            <div style="font-size: 13px; color: #94A3B8; margin-top: 5px;">內建強效防錯：自動洗淨並剔除 jobCategory 的科學記號與純數字代碼錯位欄位</div>
+            <input type="file" id="file_input" accept=".csv" style="display: none" onchange="handleFileSelect(this.files)">
+            <div class="status-message" id="status_msg">✨ 大數據架構已深度對齊，乾淨圖表更新完成！</div>
+        </div>
+
+        <div class="tabs-header">
+            <button class="tab-btn active" onclick="switchTab(event, 'tab_dashboard')">📊 市場整體行情儀表板</button>
+            <button class="tab-btn" onclick="switchTab(event, 'tab_titles')">🏆 熱門職稱排行分析</button>
+            <button class="tab-btn" onclick="switchTab(event, 'tab_keywords')">🔍 核心技能高頻關鍵字</button>
+        </div>
+
+        <div id="tab_dashboard" class="tab-content active">
+            <div class="grid-dashboard">
+                <div class="grid-left">
+                    <div class="card">
+                        <div class="card-title">📍 全台各地理區域職缺熱度分佈</div>
+                        <div id="chart_location" class="chart-box"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title" id="dyn_chart_title">📊 職務類別行情明細 (請先選擇右側職務類別)</div>
+                        <div id="chart_salary_detail" class="chart-box"></div>
+                    </div>
+                </div>
+                <div class="grid-right">
+                    <div class="card" style="position: sticky; top: 20px;">
+                        <div class="card-title">🎯 原始職務類別聯動</div>
+                        <div style="margin-bottom: 15px; font-size: 14px; color:#666; font-weight: bold;">請選擇職務類別 (jobCategory)：</div>
+                        <select id="ipt_cat" class="form-control" onchange="handleCategoryChange()">
+                            <option value="">-- 請先上傳檔案 --</option>
+                        </select>
+                        <div style="margin-top: 20px; font-size: 12px; color: #94A3B8; line-height: 1.6;">
+                            💡 <b>核心聯動說明：</b><br>
+                            當您在左側上傳 104 原始資料後，系統會自動萃取所有不重複的職務類別。在此處切換類別時，左下方的「行情明細圖」將會同步連動展示該類別的最低、平均與最高薪資落點。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab_titles" class="tab-content">
+            <div class="card">
+                <div class="card-title">🏆 Top 20 熱門招募職稱排行與職缺佔比</div>
+                <div id="chart_titles" class="chart-box" style="min-height: 550px;"></div>
+            </div>
+        </div>
+
+        <div id="tab_keywords" class="tab-content">
+            <div class="card">
+                <div class="card-title">🔍 104 科技職缺核心關鍵字與技術高頻率統計 (排除一般公司福利詞彙)</div>
+                <div class="table-wrapper">
+                    <table class="kw-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">排名</th>
+                                <th>核心技術 / 排外高頻關鍵字</th>
+                                <th style="width: 200px;">出現頻次</th>
+                            </tr>
+                        </thead>
+                        <tbody id="kw_table_body">
+                            <tr>
+                                <td colspan="3" style="text-align: center; color: #94A3B8; padding: 40px 0;">請先上傳 CSV 數據檔案以進行中文分詞與高頻關鍵字分析</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let cLoc = echarts.init(document.getElementById('chart_location'));
+        let cSalaryDetail = echarts.init(document.getElementById('chart_salary_detail'));
+        let cTitles = echarts.init(document.getElementById('chart_titles'));
+        
+        let catStats = {};
+
+        const dropZone = document.getElementById('drop_zone');
+        ['dragenter', 'dragover'].forEach(name => {
+            dropZone.addEventListener(name, (e) => { e.preventDefault(); dropZone.style.borderColor = '#FF7826'; dropZone.style.backgroundColor = '#FFFBF7'; }, false);
+        });
+        ['dragleave', 'drop'].forEach(name => {
+            dropZone.addEventListener(name, (e) => { e.preventDefault(); dropZone.style.borderColor = '#CBD5E1'; dropZone.style.backgroundColor = 'white'; }, false);
+        });
+        dropZone.addEventListener('drop', (e) => { handleFileSelect(e.dataTransfer.files); }, false);
+
+        function handleFileSelect(files) {
+            if (!files.length) return;
+            const file = files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                let text = e.target.result;
+                if (text.includes('')) {
+                    const cpReader = new FileReader();
+                    cpReader.onload = function(evt) { processCsvData(evt.target.result); };
+                    cpReader.readAsText(file, 'cp950');
+                } else {
+                    processCsvData(text);
+                }
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+
+        function processCsvData(csvText) {
+            const lines = csvText.split(/\r?\n/);
+            if(lines.length < 2) return;
+            
+            // 彈性標頭查找對位
+            const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+            
+            const idxTitle = headers.findIndex(h => h.includes('title'));
+            const idxCat = headers.findIndex(h => h.includes('category') || h.includes('類別'));
+            const idxLoc = headers.findIndex(h => h.includes('location') || h.includes('地區'));
+            const idxSalary = headers.findIndex(h => h.includes('salary') || h.includes('薪資'));
+            const idxSalaryType = headers.findIndex(h => h.includes('type') || h.includes('型態'));
+
+            let locCounts = {};
+            let titleCounts = {};
+            catStats = {};
+            let allText = "";
+
+            for(let i = 1; i < lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                
+                // 結構化解析複雜 CSV（精準處理引號內的逗號，避免欄位大錯位）
+                let row = [];
+                let inQuotes = false;
+                let current = "";
+                for(let j = 0; j < lines[i].length; j++) {
+                    let ch = lines[i][j];
+                    if(ch === '"') {
+                        inQuotes = !inQuotes;
+                    } else if(ch === ',' && !inQuotes) {
+                        row.push(current.trim());
+                        current = "";
+                    } else {
+                        current += ch;
+                    }
+                }
+                row.push(current.trim());
+
+                let rawTitle = (row[idxTitle] || "").replace(/^"|"$/g, '').trim();
+                let rawCat = (row[idxCat] || "").replace(/^"|"$/g, '').trim();
+                let rawLoc = (row[idxLoc] || "未知地區").replace(/^"|"$/g, '').trim();
+                let rawSalary = (row[idxSalary] || "").replace(/^"|"$/g, '').trim();
+                let rawSalaryType = (row[idxSalaryType] || "月薪").replace(/^"|"$/g, '').trim();
+
+                // 🌟 【核心防禦機制 1】：清洗與隔離職稱噪點
+                if(!rawTitle || rawTitle === "無職稱" || /^\d+$/.test(rawTitle) || /[eE]\+/.test(rawTitle) || rawTitle.includes('-') && /^\d/.test(rawTitle)) {
+                    continue; 
+                }
+
+                // 🌟 【核心防禦機制 2】：清洗與校正職務類別科學記號
+                if (!rawCat || rawCat === "無分類" || /[eE]\+/.test(rawCat) || /^\d+$/.test(rawCat) || rawCat.length <= 1) {
+                    continue; // 拋棄代碼雜質
+                }
+                
+                // 移除可能的數字前綴（例如 "1.資訊軟體" 轉成 "資訊軟體"）
+                let cleanCat = rawCat.replace(/^[\d\s\.\-_]+/, '').trim();
+                if (cleanCat.includes(',')) {
+                    cleanCat = cleanCat.split(',')[0].trim(); // 若有多重分類取第一個
+                }
+                if (!cleanCat || cleanCat.length <= 1) continue;
+
+                // 地理區域清洗
+                let cleanLoc = rawLoc.substring(0, 3) || "未知";
+                locCounts[cleanLoc] = (locCounts[cleanLoc] || 0) + 1;
+
+                // 熱門職稱計算
+                titleCounts[rawTitle] = (titleCounts[rawTitle] || 0) + 1;
+                allText += rawTitle + " " + cleanCat + " ";
+
+                // 薪資處理落點
+                let annualMax = NaN;
+                if (!rawSalary.includes('面議') && !rawSalary.includes('經常性薪資')) {
+                    let numbers = rawSalary.replace(/,/g, '').match(/\d+/g);
+                    if (numbers && numbers.length > 0) {
+                        let maxS = Math.max(...numbers.map(Number));
+                        annualMax = rawSalaryType.includes('月薪') ? maxS * 12 : maxS;
+                    }
+                }
+
+                if (!isNaN(annualMax) && annualMax <= 6000000 && annualMax > 300000) {
+                    let monthlySalary = annualMax / 12;
+                    if (!catStats[cleanCat]) {
+                        catStats[cleanCat] = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+                    }
+                    catStats[cleanCat].sum += monthlySalary;
+                    catStats[cleanCat].count += 1;
+                    if (monthlySalary < catStats[cleanCat].min) catStats[cleanCat].min = monthlySalary;
+                    if (monthlySalary > catStats[cleanCat].max) catStats[cleanCat].max = monthlySalary;
+                }
+            }
+
+            for (let k in catStats) {
+                catStats[k].mean = Math.round(catStats[k].sum / catStats[k].count);
+                catStats[k].min = Math.round(catStats[k].min);
+                catStats[k].max = Math.round(catStats[k].max);
+            }
+
+            renderLocationChart(locCounts);
+            renderTitlesChart(titleCounts);
+            renderKeywordTable(allText);
+
+            // 更新職類下拉選單
+            let selectHtml = '<option value="">-- 請選擇原始職類 --</option>';
+            Object.keys(catStats).sort().forEach(cat => {
+                selectHtml += `<option value="${cat}">${cat}</option>`;
+            });
+            document.getElementById('ipt_cat').innerHTML = selectHtml;
+            
+            if(Object.keys(catStats).length > 0) {
+                document.getElementById('ipt_cat').selectedIndex = 1;
+                handleCategoryChange();
+            }
+
+            let statusMsg = document.getElementById('status_msg');
+            statusMsg.style.display = 'block';
+            setTimeout(() => { statusMsg.style.fadeOut = true; }, 3000);
+        }
+
+        function renderLocationChart(locCounts) {
+            let sorted = Object.entries(locCounts).sort((a,b) => b[1]-a[1]).slice(0, 15);
+            cLoc.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                xAxis: { type: 'category', data: sorted.map(x => x[0]), axisLabel: { interval: 0, rotate: 20 } },
+                yAxis: { type: 'value', name: '職缺招募數量' },
+                series: [{
+                    name: '職缺熱度', type: 'bar', data: sorted.map(x => x[1]),
+                    itemStyle: { color: '#2F3239' },
+                    label: { show: true, position: 'top' }
+                }]
+            }, true);
+        }
+
+        function handleCategoryChange() {
+            const selectedCat = document.getElementById('ipt_cat').value;
+            if (!selectedCat || !catStats[selectedCat]) {
+                cSalaryDetail.clear();
+                return;
+            }
+            document.getElementById('dyn_chart_title').innerText = `📊 職務原始類別分佈明細: ${selectedCat}`;
+            const specificData = catStats[selectedCat];
+            cSalaryDetail.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                xAxis: { type: 'category', data: ['最低薪資下限', '市場平均行情', '最高薪資上限'] },
+                yAxis: { type: 'value', name: '新台幣 (元)' },
+                series: [{
+                    name: '行情落點金額', type: 'bar',
+                    data: [
+                        { value: specificData.min, itemStyle: { color: '#999999' } },
+                        { value: specificData.mean, itemStyle: { color: '#FF7826' } },
+                        { value: specificData.max, itemStyle: { color: '#2F3239' } }
+                    ],
+                    label: { show: true, position: 'top', formatter: (p) => 'NT$ ' + p.value.toLocaleString() }
+                }]
+            }, true);
+        }
+
+        function renderTitlesChart(titleCounts) {
+            let sorted = Object.entries(titleCounts).sort((a,b) => b[1]-a[1]).slice(0, 20).reverse();
+            cTitles.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '22%', right: '8%', top: '5%', bottom: '5%' },
+                xAxis: { type: 'value', name: '職缺需求量' },
+                yAxis: { type: 'category', data: sorted.map(x => x[0]), axisLabel: { fontStyle: 'normal', fontSize: 12 } },
+                series: [{
+                    name: '職缺量', type: 'bar', data: sorted.map(x => x[1]),
+                    itemStyle: { color: '#FF7826' },
+                    label: { show: true, position: 'right' }
+                }]
+            }, true);
+        }
+
+        function renderKeywordTable(text) {
+            let matches = text.match(/[\u4e00-\u9fa5]{2,}/g) || [];
+            const stopWords = new Set(['公司', '工作', '發展', '能力', '我們', '提供', '團隊', '福利', '制度', '享勞', '健保', '不拘', '以上', '相關', '配合', '進行', '維護', '負責', '具備', '職務', '類別', '軟體', '工程', '工程師', '系統', '開發', '設計', '資訊', '研發', '管理', '技術', '台北', '職缺', '招募']);
+            let counts = {};
+            matches.forEach(w => {
+                if (!stopWords.has(w)) counts[w] = (counts[w] || 0) + 1;
+            });
+            let topKws = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 25);
+            let html = "";
+            topKws.forEach((kw, i) => {
+                html += `<tr><td><b>${i+1}</b></td><td>{ <b>${kw[0]}</b> }</td><td><span style="color:#FF7826; font-weight:bold;">${kw[1].toLocaleString()}</span> 次出現</td></tr>`;
+            });
+            document.getElementById('kw_table_body').innerHTML = html || '<tr><td colspan=\"3\" style=\"text-align:center;\">未成功分析出關鍵字</td></tr>';
+        }
+
+        function switchTab(evt, tabId) {
+            const tabContents = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < tabContents.length; i++) tabContents[i].classList.remove("active");
+            const tabBtns = document.getElementsByClassName("tab-btn");
+            for (let i = 0; i < tabBtns.length; i++) tabBtns[i].classList.remove("active");
+            document.getElementById(tabId).classList.add("active");
+            evt.currentTarget.classList.add("active");
+            
+            cLoc.resize();
+            cSalaryDetail.resize();
+            cTitles.resize();
+        }
+
+        window.onresize = function() {
+            cLoc.resize();
+            cSalaryDetail.resize();
+            cTitles.resize();
+        };
+    </script>
+</body>
+</html>
